@@ -1,0 +1,167 @@
+version: 2
+
+models:
+  - name: fct_daily_returns
+    columns:
+      - name: date
+        tests:
+          - not_null
+      - name: ticker
+        tests:
+          - not_null
+      - name: daily_return
+        tests:
+          - not_null
+    tests:
+      - unique:
+          column_name: "date || '|' || ticker"
+
+  - name: fct_rolling_returns
+    columns:
+      - name: date
+        tests:
+          - not_null
+      - name: ticker
+        tests:
+          - not_null
+    tests:
+      - unique:
+          column_name: "date || '|' || ticker"
+
+  - name: fct_drawdown
+    columns:
+      - name: drawdown
+        tests:
+          - not_null
+    tests:
+      - unique:
+          column_name: "date || '|' || ticker"
+
+  - name: fct_macro_overlay
+    columns:
+      - name: rate_trend
+        tests:
+          - accepted_values:
+              values: [hiking, cutting, neutral]
+      - name: inflation_regime
+        tests:
+          - accepted_values:
+              values: [high, moderate, low]
+      - name: yield_curve_regime
+        tests:
+          - accepted_values:
+              values: [inverted, flat, normal]
+
+  - name: fct_portfolio_analytics
+    tests:
+      - unique:
+          column_name: "ticker || '|' || period_label"
+    columns:
+      - name: ticker
+        tests:
+          - not_null
+      - name: period_label
+        tests:
+          - not_null
+      - name: sharpe_ratio
+        tests:
+          - not_null
+
+  - name: fct_correlation_matrix
+    columns:
+      - name: ticker_a
+        tests:
+          - not_null
+      - name: ticker_b
+        tests:
+          - not_null
+      - name: correlation
+        tests:
+          - not_null
+      - name: period_days
+        tests:
+          - not_null
+
+  - name: fct_drawdown_episodes
+    columns:
+      - name: ticker
+        tests:
+          - not_null
+      - name: episode_start
+        tests:
+          - not_null
+      - name: episode_trough_depth
+        tests:
+          - not_null
+      - name: still_in_drawdown
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+  - name: fct_rolling_correlations
+    tests:
+      - unique:
+          column_name: "date || '|' || ticker_a || '|' || ticker_b"
+    columns:
+      - name: date
+        tests:
+          - not_null
+      - name: ticker_a
+        tests:
+          - not_null
+      - name: ticker_b
+        tests:
+          - not_null
+      - name: correlation_90d
+        tests:
+          - not_null
+
+  - name: fct_regime_performance
+    columns:
+      - name: ticker
+        tests:
+          - not_null
+      - name: rate_trend
+        tests:
+          - not_null
+          - accepted_values:
+              values: [hiking, cutting, neutral]
+      - name: inflation_regime
+        tests:
+          - not_null
+          - accepted_values:
+              values: [high, moderate, low]
+      - name: yield_curve_regime
+        tests:
+          - not_null
+          - accepted_values:
+              values: [inverted, flat, normal]
+      - name: sharpe
+        tests:
+          - not_null
+
+  - name: fct_cortex_enriched_insights
+    columns:
+      - name: run_date
+        tests:
+          - not_null
+      - name: ticker
+        tests:
+          - not_null
+      - name: insight_type
+        tests:
+          - not_null
+          - accepted_values:
+              values: [anomaly, drawdown, macro]
+      - name: enriched_note
+        tests:
+          - not_null
+
+  - name: fct_cortex_insights
+    columns:
+      - name: ticker_daily_note
+        tests:
+          - not_null
+      - name: macro_regime_summary
+        tests:
+          - not_null

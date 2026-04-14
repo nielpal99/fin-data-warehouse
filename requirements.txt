@@ -1,0 +1,12 @@
+yfinance
+duckdb
+pandas
+snowflake-connector-python
+snowflake-sqlalchemy
+dbt-snowflake
+python-dotenv
+fredapi
+numpy
+scipy
+matplotlib
+pyarrow

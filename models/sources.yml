@@ -1,0 +1,10 @@
+version: 2
+
+sources:
+  - name: raw
+    database: FIN_DATA_WAREHOUSE
+    schema: RAW
+    tables:
+      - name: RAW_DAILY_PRICES
+      - name: STG_MACRO
+      - name: CORTEX_ENRICHED_INSIGHTS

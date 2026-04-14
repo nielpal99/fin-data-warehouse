@@ -1,0 +1,32 @@
+version: 2
+
+models:
+  - name: stg_daily_prices
+    columns:
+      - name: date
+        tests:
+          - not_null
+      - name: ticker
+        tests:
+          - not_null
+          - accepted_values:
+              values: [VTI, VOO, QQQ, SPY, IWM, BND, TLT, GLD, BTC-USD, ETH-USD, DX-Y.NYB]
+      - name: adjusted_close
+        tests:
+          - not_null
+      - name: asset_class
+        tests:
+          - not_null
+    tests:
+      - unique:
+          column_name: "date || '|' || ticker"
+
+  - name: stg_tickers
+    columns:
+      - name: ticker
+        tests:
+          - not_null
+          - unique
+      - name: asset_class
+        tests:
+          - not_null

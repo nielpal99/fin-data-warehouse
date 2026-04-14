@@ -1,0 +1,24 @@
+# Credentials — never commit
+.env
+
+# dbt build artifacts
+target/
+dbt_packages/
+logs/
+
+# Local staging files (binary/large)
+staging/local.duckdb
+staging/*.parquet
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# macOS
+.DS_Store
+
+# Profiles with secrets
+profiles/.user.yml
