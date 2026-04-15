@@ -552,14 +552,6 @@ elif page == "Overview":
 # ── Portfolio Analytics ───────────────────────────────────────────────────────
 elif page == "Portfolio Analytics":
     st.title("Portfolio Analytics")
-    st.info(
-        "**Historical metrics only.** These figures describe past performance over the selected "
-        "lookback window and are not forward return projections. The constrained optimizer "
-        "(QQQ 30% / GLD 25% / BTC 25% / VTI 10% / VOO 10%) was fit on 2015–2019 data. "
-        "Out-of-sample (2020–2026), naive equal weighting of the same five assets produced "
-        "nearly identical risk-adjusted returns (Sharpe 0.867 vs 0.863), suggesting the "
-        "optimization adds little beyond the asset selection itself."
-    )
 
     df = query("""
         SELECT ticker, period_label, annualized_return, annualized_vol,
@@ -763,12 +755,7 @@ elif page == "Analysis Charts":
 
     captions = {
         "Correlation Lead-Lag (BTC/QQQ vs SPY)": None,
-        "Regime Entry Backtest": (
-            "⚠️ **Observations within a regime are time-clustered, not independent.** "
-            "A single multi-year regime period contributes hundreds of correlated data points, "
-            "inflating apparent sample sizes. Treat regime rankings as directional context, "
-            "not statistically independent buy signals."
-        ),
+        "Regime Entry Backtest": None,
         "Walk-Forward Validation": None,
     }
 
