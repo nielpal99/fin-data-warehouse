@@ -165,9 +165,9 @@ They rarely ask: if it does fall, how long until I get my money back?
     recovery = query("""
         SELECT ticker,
                COUNT(*) AS n_episodes,
-               ROUND(AVG(days_to_recovery), 0) AS avg_recovery_days
+               ROUND(AVG(recovery_days), 0) AS avg_recovery_days
         FROM fct_drawdown_episodes
-        WHERE days_to_recovery IS NOT NULL
+        WHERE recovery_days IS NOT NULL
         GROUP BY ticker
         ORDER BY avg_recovery_days DESC
     """)
@@ -421,9 +421,9 @@ elif page == "Drawdown & Episodes":
     st.divider()
     st.subheader("Drawdown Episodes")
     episodes = query("""
-        SELECT ticker, episode_start, trough_date, recovery_date,
+        SELECT ticker, episode_start, episode_trough_date, episode_end,
                ROUND(episode_trough_depth * 100, 1) AS trough_pct,
-               days_to_trough, days_to_recovery, still_in_drawdown
+               days_to_trough, recovery_days, still_in_drawdown
         FROM fct_drawdown_episodes
         ORDER BY episode_trough_depth
         LIMIT 50
