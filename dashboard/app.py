@@ -81,13 +81,14 @@ def _tavily_key():
 
 
 @st.cache_data(ttl=3600)
-def get_tavily_insights(drawdown_tickers: tuple):
+def get_tavily_insights(drawdown_tickers: tuple, api_key: str):
     """
     Primary insight source. Searches Tavily for macro + each active drawdown
     ticker. Returns dict: {label -> {"snippets": [...], "dd_pct": str}}.
     drawdown_tickers is a tuple of (ticker, dd_pct) pairs (hashable for cache).
+    api_key passed explicitly so cache key includes it.
     """
-    key = _tavily_key()
+    key = api_key
     if not key:
         return None
     try:
@@ -150,7 +151,7 @@ def render_overview_insights():
         drawdown_tickers = ()
 
     # ── Try Tavily first ──────────────────────────────────────────────────────
-    news = get_tavily_insights(drawdown_tickers)
+    news = get_tavily_insights(drawdown_tickers, _tavily_key() or "")
     if news:
         ts = datetime.datetime.now().strftime("%b %d %Y %H:%M")
         for key, item in news.items():
@@ -247,7 +248,7 @@ def render_insights(insights_df):
     except Exception:
         drawdown_tickers = ()
 
-    news = get_tavily_insights(drawdown_tickers)
+    news = get_tavily_insights(drawdown_tickers, _tavily_key() or "")
     if news:
         for key, item in news.items():
             with st.expander(f"{item['label']} — via Tavily"):
