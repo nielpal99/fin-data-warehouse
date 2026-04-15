@@ -756,28 +756,12 @@ elif page == "Analysis Charts":
     st.title("Analysis Charts")
 
     charts = {
-        "Efficient Frontier (Constrained)":      ANALYSIS / "efficient_frontier_v2.png",
-        "DCA vs Lump Sum vs HYSA":               ANALYSIS / "dca_hysa_comparison.png",
         "Correlation Lead-Lag (BTC/QQQ vs SPY)": ANALYSIS / "correlation_lead_lag.png",
         "Regime Entry Backtest":                 ANALYSIS / "regime_entry_backtest.png",
         "Walk-Forward Validation":               ANALYSIS / "walk_forward_results.png",
     }
 
     captions = {
-        "Efficient Frontier (Constrained)": (
-            "⚠️ **In-sample only.** The optimizer was fit on 2015–2019 returns. "
-            "These weights (QQQ 30% / GLD 25% / BTC 25% / VTI 10% / VOO 10%) should not be "
-            "treated as a recommended allocation. Out-of-sample (2020–2026), naive equal "
-            "weighting of the same five assets produced nearly identical risk-adjusted returns "
-            "(Sharpe 0.867 vs 0.863), suggesting the optimization adds little beyond asset selection."
-        ),
-        "DCA vs Lump Sum vs HYSA": (
-            "⚠️ **Monte Carlo uses full-history in-sample parameters** (2015–2026 return "
-            "distribution), which includes BTC's exceptional bull run. The ~3% crossover "
-            "threshold — below which DCA+HYSA beats lump sum — is not actionable: virtually "
-            "every diversified portfolio has exceeded 3% annual returns historically. "
-            "For out-of-sample return expectations, see the Walk-Forward Validation chart instead."
-        ),
         "Correlation Lead-Lag (BTC/QQQ vs SPY)": None,
         "Regime Entry Backtest": (
             "⚠️ **Observations within a regime are time-clustered, not independent.** "
