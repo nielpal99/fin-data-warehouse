@@ -80,6 +80,24 @@ def _tavily_key():
         return os.environ.get("TAVILY_API_KEY")
 
 
+@st.cache_data(ttl=300)
+def get_live_prices():
+    """Fetch live (15-min delayed) prices for all tickers via yfinance. Cached 5 min."""
+    import yfinance as yf
+    tickers = ["VTI", "VOO", "QQQ", "SPY", "IWM", "BND", "TLT", "GLD", "BTC-USD", "ETH-USD", "DX-Y.NYB"]
+    rows = []
+    for ticker in tickers:
+        try:
+            fi = yf.Ticker(ticker).fast_info
+            price = fi.last_price
+            prev  = fi.previous_close
+            chg_pct = round((price - prev) / prev * 100, 2) if prev else None
+            rows.append({"Ticker": ticker, "Live Price": round(price, 2), "Chg %": chg_pct})
+        except Exception:
+            rows.append({"Ticker": ticker, "Live Price": None, "Chg %": None})
+    return pd.DataFrame(rows)
+
+
 @st.cache_data(ttl=3600)
 def get_tavily_insights(drawdown_tickers: tuple, api_key: str):
     """
@@ -497,6 +515,26 @@ elif page == "Overview":
     st.title("Financial Data Warehouse")
     st.caption("2015–2026 · 11 tickers · yfinance + FRED · Snowflake + dbt")
 
+    # ── Live Prices (yfinance, ~15-min delayed, refreshes every 5 min) ─────────
+    st.subheader("Live Prices")
+    live_df = get_live_prices()
+    as_of = datetime.datetime.now().strftime("%b %d %Y %H:%M")
+
+    def fmt_chg(v):
+        if v is None:
+            return "—"
+        arrow = "▲" if v >= 0 else "▼"
+        return f"{arrow} {abs(v):.2f}%"
+
+    live_disp = live_df.copy()
+    live_disp["Live Price"] = live_disp["Live Price"].apply(
+        lambda x: f"${x:,.2f}" if x is not None else "—"
+    )
+    live_disp["Chg %"] = live_disp["Chg %"].apply(fmt_chg)
+    st.dataframe(live_disp, use_container_width=True, hide_index=True)
+    st.caption(f"~15-min delayed · refreshes every 5 min · as of {as_of}")
+    st.divider()
+
     col1, col2, col3, col4 = st.columns(4)
 
     latest = query("""
@@ -540,8 +578,8 @@ elif page == "Overview":
         last_date = latest["date"].max() if "date" in latest.columns else query(
             "SELECT MAX(date) AS d FROM fct_daily_returns").iloc[0]["d"]
         st.caption(
-            f"Prices update on market trading days. "
-            f"Last ingestion: {pd.to_datetime(last_date).strftime('%b %d, %Y')}"
+            f"End-of-day closes from warehouse · equities update on trading days · "
+            f"crypto updates daily · last ingestion: {pd.to_datetime(last_date).strftime('%b %d, %Y')}"
         )
         if disp["Anomaly"].eq("").all():
             st.caption("No anomalies detected today")
