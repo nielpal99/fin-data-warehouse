@@ -282,16 +282,11 @@ if page == "The Research":
 
     # ── Opening ───────────────────────────────────────────────────────────────
     prose("""
-I've been following markets seriously for years. I have opinions about macro,
-I invest my own money, and I've spent more time than I'd like reading Fed
-statements and earnings transcripts.
+I've been following markets seriously for years. I have opinions about macro, I invest my own money, and I normally keep up with earnings calls and Fed statements.
 
-But there were three things I kept believing without ever actually checking:
-That crypto diversifies an equity portfolio. That bonds are the safe asset.
-That sophisticated portfolio optimization beats simple approaches.
+But there were three things I kept believing without ever actually checking: That crypto diversifies an equity portfolio. That bonds are the safe asset. That sophisticated portfolio optimization beats simple approaches.
 
-So I built a framework to find out. Here's what 10 years of daily data
-across 11 assets actually said.
+So I built a framework to find out. Here's what 10 years of daily data across 11 assets actually said.
 """)
 
     st.divider()
