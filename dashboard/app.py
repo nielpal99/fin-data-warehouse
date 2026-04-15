@@ -97,14 +97,23 @@ def get_tavily_insights(drawdown_tickers: tuple, api_key: str):
         results = {}
 
         # Macro search
-        resp = client.search(
+        macro_resp = client.search(
             "Fed reserve CPI inflation macro outlook latest",
             search_depth="basic", max_results=3,
         )
+        macro_articles = macro_resp.get("results", [])
+        print(f"Macro results: {len(macro_articles)} articles found")
+        if len(macro_articles) == 0:
+            macro_resp = client.search(
+                "Federal Reserve interest rates inflation 2026",
+                search_depth="basic", max_results=3,
+            )
+            macro_articles = macro_resp.get("results", [])
+            print(f"Macro fallback results: {len(macro_articles)} articles found")
         results["macro"] = {
             "label":    "📊 Today's Macro Context",
             "snippets": [r.get("content", "")[:350]
-                         for r in resp.get("results", [])
+                         for r in macro_articles
                          if r.get("content")][:3],
             "dd_pct":   "",
         }
@@ -158,10 +167,8 @@ def render_overview_insights():
             snippets = item["snippets"]
             label    = item["label"]
             if key == "macro":
-                with st.expander(label, expanded=True):
-                    for s in snippets:
-                        st.markdown(f"- {s}")
-                    st.caption(f"Updated hourly · {ts}")
+                bullet_text = "\n\n".join(f"- {s}" for s in snippets)
+                st.info(f"**📊 Today's Macro Context**\n\n{bullet_text}\n\n*Updated hourly · {ts}*")
             else:
                 with st.expander(label):
                     for s in snippets:
@@ -229,8 +236,11 @@ def render_insights(insights_df):
             row["dd_pct"] = dd_today.get(row["ticker"], "")
             label = insight_label(row)
             note  = clean_note(row["enriched_note"])
-            with st.expander(label):
-                st.write(note)
+            if row["insight_type"] == "macro":
+                st.info(f"**📊 Today's Macro Context**\n\n{note}")
+            else:
+                with st.expander(label):
+                    st.write(note)
         return
 
     # Cortex empty — try Tavily
@@ -251,9 +261,13 @@ def render_insights(insights_df):
     news = get_tavily_insights(drawdown_tickers, _tavily_key() or "")
     if news:
         for key, item in news.items():
-            with st.expander(f"{item['label']} — via Tavily"):
-                for s in item["snippets"]:
-                    st.markdown(f"- {s}")
+            if key == "macro":
+                bullet_text = "\n\n".join(f"- {s}" for s in item["snippets"])
+                st.info(f"**📊 Today's Macro Context**\n\n{bullet_text}")
+            else:
+                with st.expander(f"{item['label']} — via Tavily"):
+                    for s in item["snippets"]:
+                        st.markdown(f"- {s}")
         return
 
     st.caption("Insights unavailable — check API credentials")
