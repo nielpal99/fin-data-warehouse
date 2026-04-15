@@ -552,6 +552,13 @@ elif page == "Overview":
 # ── Portfolio Analytics ───────────────────────────────────────────────────────
 elif page == "Portfolio Analytics":
     st.title("Portfolio Analytics")
+    st.caption(
+        "⚠️ All metrics use the full dataset (2015–2026). The optimizer weights shown "
+        "(QQQ 30% / GLD 25% / BTC 25% / VTI 10% / VOO 10%) were derived from 2015–2019 "
+        "training data only. Out-of-sample testing on 2020–2026 showed naive equal weighting "
+        "matched the optimizer on risk-adjusted returns (Sharpe 0.867 vs 0.863) — asset "
+        "selection matters more than weight optimization."
+    )
 
     df = query("""
         SELECT ticker, period_label, annualized_return, annualized_vol,
@@ -755,14 +762,17 @@ elif page == "Analysis Charts":
 
     captions = {
         "Correlation Lead-Lag (BTC/QQQ vs SPY)": None,
-        "Regime Entry Backtest": None,
+        "Regime Entry Backtest": (
+            "⚠️ All regime data uses full history 2015–2026. Observations within a regime are "
+            "time-clustered, not independent — treat rankings as directional context, not a buy signal."
+        ),
         "Walk-Forward Validation": None,
     }
 
     selected_chart = st.selectbox("Chart", list(charts.keys()))
     caption = captions[selected_chart]
     if caption:
-        st.warning(caption)
+        st.caption(caption)
 
     path = charts[selected_chart]
     if path.exists():
