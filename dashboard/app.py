@@ -1,4 +1,5 @@
 import os
+import re
 import warnings
 import streamlit as st
 import pandas as pd
@@ -38,6 +39,114 @@ def query(sql):
     df = pd.read_sql(sql, get_conn())
     df.columns = df.columns.str.lower()
     return df
+
+
+# ── Shared helpers ────────────────────────────────────────────────────────────
+
+PREAMBLE_PATTERNS = [
+    r"^Here is a \d+ sentence macro regime analysis[:\s]+",
+    r"^Here is a \d+-sentence macro regime analysis[:\s]+",
+    r"^Here is a \d+ sentence drawdown analysis for [^:]+[:\s]+",
+    r"^Here is a \d+-sentence drawdown analysis for [^:]+[:\s]+",
+    r"^Here is a \d+ sentence explanation for[^:]+[:\s]+",
+    r"^Here is a \d+-sentence explanation for[^:]+[:\s]+",
+]
+
+def clean_note(text):
+    """Strip Cortex preamble phrases and surrounding whitespace."""
+    if not isinstance(text, str):
+        return ""
+    t = text.strip()
+    for pattern in PREAMBLE_PATTERNS:
+        t = re.sub(pattern, "", t, flags=re.IGNORECASE).strip()
+    return t
+
+
+def insight_label(row):
+    """Human-readable expander label for a Cortex insight row."""
+    if row["insight_type"] == "macro":
+        return "📊 Today's Macro Regime Summary"
+    dd_pct = row.get("dd_pct", "")
+    pct_str = f" ({dd_pct}%)" if dd_pct else ""
+    return f"⚠️ {row['ticker']} — Active Drawdown{pct_str}"
+
+
+@st.cache_data(ttl=3600)
+def tavily_fallback():
+    """Fetch live news snippets via Tavily when Cortex insights are unavailable."""
+    try:
+        from tavily import TavilyClient
+        key = (
+            st.secrets.get("TAVILY_API_KEY")
+            or os.environ.get("TAVILY_API_KEY")
+        )
+        if not key:
+            return None
+        client = TavilyClient(api_key=key)
+        searches = {
+            "📊 Macro": "Fed reserve rate decision CPI inflation macro outlook today",
+            "⚠️ BTC-USD": "Bitcoin BTC price drawdown market news today",
+            "⚠️ ETH-USD": "Ethereum ETH price drawdown market news today",
+        }
+        results = {}
+        for label, q in searches.items():
+            resp = client.search(q, search_depth="basic", max_results=3)
+            snippets = [
+                r.get("content", "")[:300]
+                for r in resp.get("results", [])
+                if r.get("content")
+            ][:2]
+            results[label] = snippets
+        return results
+    except Exception:
+        return None
+
+
+def render_insights(insights_df):
+    """
+    Display Cortex enriched insights with clean labels and stripped preambles.
+    Falls back to Tavily live news if the dataframe is empty or notes are blank.
+    Falls back to a caption if both sources fail.
+    """
+    # Pull drawdown pct to enrich labels
+    try:
+        dd_today = query("""
+            SELECT ticker, ROUND(drawdown * 100, 1) AS dd_pct
+            FROM fct_drawdown
+            WHERE date = (SELECT MAX(date) FROM fct_drawdown)
+        """).set_index("ticker")["dd_pct"].to_dict()
+    except Exception:
+        dd_today = {}
+
+    valid = insights_df[
+        insights_df["enriched_note"].notna() &
+        (insights_df["enriched_note"].str.strip() != "")
+    ] if len(insights_df) > 0 else insights_df
+
+    if len(valid) > 0:
+        for _, row in valid.iterrows():
+            row = row.copy()
+            row["dd_pct"] = dd_today.get(row["ticker"], "")
+            label = insight_label(row)
+            note  = clean_note(row["enriched_note"])
+            with st.expander(label):
+                st.write(note)
+        return
+
+    # Cortex unavailable — try Tavily
+    st.caption("Cortex insights unavailable — fetching live news via Tavily")
+    news = tavily_fallback()
+    if news:
+        for label, snippets in news.items():
+            with st.expander(f"{label} — Live news via Tavily"):
+                if snippets:
+                    for s in snippets:
+                        st.markdown(f"- {s}")
+                else:
+                    st.caption("No snippets returned.")
+        return
+
+    st.caption("Insights unavailable — check API credentials")
 
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
@@ -254,9 +363,7 @@ But it ensures the starting point is evidence, not vibes.
     """)
     _, col_ins, _ = st.columns([1, 6, 1])
     with col_ins:
-        for _, row in insights.iterrows():
-            with st.expander(f"[{row['insight_type'].upper()}] {row['ticker']}"):
-                st.write(row["enriched_note"])
+        render_insights(insights)
 
     st.divider()
     st.caption(
@@ -274,7 +381,7 @@ elif page == "Overview":
     col1, col2, col3, col4 = st.columns(4)
 
     latest = query("""
-        SELECT ticker, daily_return, adjusted_close, is_anomaly
+        SELECT date, ticker, daily_return, adjusted_close, is_anomaly
         FROM fct_daily_returns
         WHERE date = (SELECT MAX(date) FROM fct_daily_returns)
         ORDER BY ticker
@@ -311,6 +418,14 @@ elif page == "Overview":
         disp["is_anomaly"] = disp["is_anomaly"].map({True: "⚠️", False: ""})
         disp.columns = ["Ticker", "Return", "Close", "Anomaly"]
         st.dataframe(disp, use_container_width=True, hide_index=True)
+        last_date = latest["date"].max() if "date" in latest.columns else query(
+            "SELECT MAX(date) AS d FROM fct_daily_returns").iloc[0]["d"]
+        st.caption(
+            f"Prices update on market trading days. "
+            f"Last ingestion: {pd.to_datetime(last_date).strftime('%b %d, %Y')}"
+        )
+        if disp["Anomaly"].eq("").all():
+            st.caption("No anomalies detected today")
 
     with col_b:
         st.subheader("Current Drawdowns")
@@ -326,9 +441,7 @@ elif page == "Overview":
         FROM fct_cortex_enriched_insights
         ORDER BY ticker
     """)
-    for _, row in insights.iterrows():
-        with st.expander(f"[{row['insight_type'].upper()}] {row['ticker']}"):
-            st.write(row["enriched_note"])
+    render_insights(insights)
 
 
 # ── Portfolio Analytics ───────────────────────────────────────────────────────
