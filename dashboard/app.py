@@ -1,5 +1,6 @@
 import os
 import re
+import datetime
 import warnings
 import streamlit as st
 import pandas as pd
@@ -71,44 +72,142 @@ def insight_label(row):
     return f"⚠️ {row['ticker']} — Active Drawdown{pct_str}"
 
 
+def _tavily_key():
+    """Resolve Tavily API key from Streamlit secrets or env."""
+    try:
+        return st.secrets["TAVILY_API_KEY"]
+    except Exception:
+        return os.environ.get("TAVILY_API_KEY")
+
+
 @st.cache_data(ttl=3600)
-def tavily_fallback():
-    """Fetch live news snippets via Tavily when Cortex insights are unavailable."""
+def get_tavily_insights(drawdown_tickers: tuple):
+    """
+    Primary insight source. Searches Tavily for macro + each active drawdown
+    ticker. Returns dict: {label -> {"snippets": [...], "dd_pct": str}}.
+    drawdown_tickers is a tuple of (ticker, dd_pct) pairs (hashable for cache).
+    """
+    key = _tavily_key()
+    if not key:
+        return None
     try:
         from tavily import TavilyClient
-        key = (
-            st.secrets.get("TAVILY_API_KEY")
-            or os.environ.get("TAVILY_API_KEY")
-        )
-        if not key:
-            return None
         client = TavilyClient(api_key=key)
-        searches = {
-            "📊 Macro": "Fed reserve rate decision CPI inflation macro outlook today",
-            "⚠️ BTC-USD": "Bitcoin BTC price drawdown market news today",
-            "⚠️ ETH-USD": "Ethereum ETH price drawdown market news today",
-        }
         results = {}
-        for label, q in searches.items():
-            resp = client.search(q, search_depth="basic", max_results=3)
-            snippets = [
-                r.get("content", "")[:300]
-                for r in resp.get("results", [])
-                if r.get("content")
-            ][:2]
-            results[label] = snippets
+
+        # Macro search
+        resp = client.search(
+            "Fed reserve CPI inflation macro outlook latest",
+            search_depth="basic", max_results=3,
+        )
+        results["macro"] = {
+            "label":    "📊 Today's Macro Context",
+            "snippets": [r.get("content", "")[:350]
+                         for r in resp.get("results", [])
+                         if r.get("content")][:3],
+            "dd_pct":   "",
+        }
+
+        # One search per active drawdown ticker
+        for ticker, dd_pct in drawdown_tickers:
+            name = ticker.replace("-USD", "").replace("-", " ")
+            resp = client.search(
+                f"{name} {ticker} price market news today",
+                search_depth="basic", max_results=3,
+            )
+            results[ticker] = {
+                "label":    f"⚠️ {ticker} — Active Drawdown ({dd_pct}%)",
+                "snippets": [r.get("content", "")[:350]
+                             for r in resp.get("results", [])
+                             if r.get("content")][:2],
+                "dd_pct":   str(dd_pct),
+            }
+
         return results
     except Exception:
         return None
 
 
+def render_overview_insights():
+    """
+    Overview page insight renderer.
+    PRIMARY: Tavily live news (dynamic drawdown tickers).
+    FALLBACK: fct_cortex_enriched_insights with preamble stripping.
+    """
+    # Fetch active major drawdowns to drive dynamic Tavily searches
+    try:
+        dd_df = query("""
+            SELECT ticker, ROUND(drawdown * 100, 1) AS dd_pct
+            FROM fct_drawdown
+            WHERE is_major_drawdown = TRUE
+              AND date = (SELECT MAX(date) FROM fct_drawdown)
+            ORDER BY drawdown
+        """)
+        drawdown_tickers = tuple(
+            (row["ticker"], row["dd_pct"]) for _, row in dd_df.iterrows()
+        )
+    except Exception:
+        drawdown_tickers = ()
+
+    # ── Try Tavily first ──────────────────────────────────────────────────────
+    news = get_tavily_insights(drawdown_tickers)
+    if news:
+        ts = datetime.datetime.now().strftime("%b %d %Y %H:%M")
+        for key, item in news.items():
+            snippets = item["snippets"]
+            label    = item["label"]
+            if key == "macro":
+                with st.expander(label, expanded=True):
+                    for s in snippets:
+                        st.markdown(f"- {s}")
+                    st.caption(f"Updated hourly · {ts}")
+            else:
+                with st.expander(label):
+                    for s in snippets:
+                        st.markdown(f"- {s}")
+        return
+
+    # ── Tavily failed — fall back to Cortex ──────────────────────────────────
+    st.caption("Live news unavailable — showing Cortex quantitative analysis")
+    try:
+        insights_df = query("""
+            SELECT ticker, insight_type, enriched_note
+            FROM fct_cortex_enriched_insights
+            ORDER BY ticker
+        """)
+        dd_today = {}
+        try:
+            dd_today = query("""
+                SELECT ticker, ROUND(drawdown * 100, 1) AS dd_pct
+                FROM fct_drawdown
+                WHERE date = (SELECT MAX(date) FROM fct_drawdown)
+            """).set_index("ticker")["dd_pct"].to_dict()
+        except Exception:
+            pass
+
+        valid = insights_df[
+            insights_df["enriched_note"].notna() &
+            (insights_df["enriched_note"].str.strip() != "")
+        ]
+        if len(valid) > 0:
+            for _, row in valid.iterrows():
+                row = row.copy()
+                row["dd_pct"] = dd_today.get(row["ticker"], "")
+                label = insight_label(row)
+                note  = clean_note(row["enriched_note"])
+                with st.expander(label):
+                    st.write(note)
+            return
+    except Exception:
+        pass
+
+    st.caption("Insights unavailable — check API credentials")
+
+
 def render_insights(insights_df):
     """
-    Display Cortex enriched insights with clean labels and stripped preambles.
-    Falls back to Tavily live news if the dataframe is empty or notes are blank.
-    Falls back to a caption if both sources fail.
+    Used by The Research page (Cortex primary, Tavily fallback).
     """
-    # Pull drawdown pct to enrich labels
     try:
         dd_today = query("""
             SELECT ticker, ROUND(drawdown * 100, 1) AS dd_pct
@@ -133,17 +232,27 @@ def render_insights(insights_df):
                 st.write(note)
         return
 
-    # Cortex unavailable — try Tavily
+    # Cortex empty — try Tavily
     st.caption("Cortex insights unavailable — fetching live news via Tavily")
-    news = tavily_fallback()
+    try:
+        dd_df = query("""
+            SELECT ticker, ROUND(drawdown * 100, 1) AS dd_pct
+            FROM fct_drawdown
+            WHERE is_major_drawdown = TRUE
+              AND date = (SELECT MAX(date) FROM fct_drawdown)
+        """)
+        drawdown_tickers = tuple(
+            (row["ticker"], row["dd_pct"]) for _, row in dd_df.iterrows()
+        )
+    except Exception:
+        drawdown_tickers = ()
+
+    news = get_tavily_insights(drawdown_tickers)
     if news:
-        for label, snippets in news.items():
-            with st.expander(f"{label} — Live news via Tavily"):
-                if snippets:
-                    for s in snippets:
-                        st.markdown(f"- {s}")
-                else:
-                    st.caption("No snippets returned.")
+        for key, item in news.items():
+            with st.expander(f"{item['label']} — via Tavily"):
+                for s in item["snippets"]:
+                    st.markdown(f"- {s}")
         return
 
     st.caption("Insights unavailable — check API credentials")
@@ -435,13 +544,8 @@ elif page == "Overview":
         st.dataframe(disp_dd, use_container_width=True, hide_index=True)
 
     st.divider()
-    st.subheader("Cortex Enriched Insights (Latest)")
-    insights = query("""
-        SELECT ticker, insight_type, enriched_note
-        FROM fct_cortex_enriched_insights
-        ORDER BY ticker
-    """)
-    render_insights(insights)
+    st.subheader("Market Insights")
+    render_overview_insights()
 
 
 # ── Portfolio Analytics ───────────────────────────────────────────────────────
